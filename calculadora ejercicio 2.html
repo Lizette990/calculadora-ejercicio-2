@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calculadora de Precios</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    .container {
+      max-width: 600px;
+    }
+    .result-box {
+      border: 2px dashed #0d6efd;
+      border-radius: 1rem;
+      padding: 1rem;
+      background: #e9f5ff;
+    }
+    table {
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container my-5">
+    <h1 class="text-center mb-4 animate__animated animate__fadeInDown">💰 Calculadora de Precios con Ganancia</h1>
+    <div class="card p-4 shadow-sm animate__animated animate__fadeInUp">
+      <div class="mb-3">
+        <label for="concept" class="form-label">Concepto / Producto</label>
+        <input type="text" class="form-control" id="concept" placeholder="Ej. Camiseta">
+      </div>
+      <div class="mb-3">
+        <label for="cost" class="form-label">Costo Base ($)</label>
+        <input type="number" class="form-control" id="cost" placeholder="Ingresa el costo base">
+      </div>
+      <div class="mb-3">
+        <label for="profit" class="form-label">% de Ganancia Deseado</label>
+        <input type="number" class="form-control" id="profit" placeholder="Ej. 30">
+      </div>
+      <button class="btn btn-primary w-100" id="btnCalcular">Calcular Precio Final 🚀</button>
+    </div>
+
+    <div id="resultado" class="mt-4 d-none animate__animated animate__fadeIn"></div>
+
+    <div class="mt-5">
+      <h4>📋 Historial de Productos</h4>
+      <table class="table table-bordered table-striped mt-3" id="productosTable">
+        <thead class="table-primary">
+          <tr>
+            <th>Concepto</th>
+            <th>Costo Base ($)</th>
+            <th>% Ganancia</th>
+            <th>Precio Sugerido ($)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-success" id="btnExcel">📗 Exportar Excel</button>
+        <button class="btn btn-danger" id="btnPDF">📕 Exportar PDF</button>
+        <button class="btn btn-secondary" id="btnBorrar">🗑️ Borrar Todo</button>
+        <button class="btn btn-warning text-white" id="btnGuardar">💾 Guardar en Navegador</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let productos = JSON.parse(localStorage.getItem('productos')) || [];
+    actualizarTabla();
+
+    document.getElementById('btnCalcular').addEventListener('click', calcularPrecio);
+    document.getElementById('btnExcel').addEventListener('click', exportarExcel);
+    document.getElementById('btnPDF').addEventListener('click', exportarPDF);
+    document.getElementById('btnBorrar').addEventListener('click', borrarProductos);
+    document.getElementById('btnGuardar').addEventListener('click', guardarLocal);
+
+    function calcularPrecio() {
+      const concepto = document.getElementById('concept').value.trim();
+      const costo = parseFloat(document.getElementById('cost').value);
+      const ganancia = parseFloat(document.getElementById('profit').value);
+      const resultadoDiv = document.getElementById('resultado');
+
+      if (!concepto || isNaN(costo) || isNaN(ganancia)) {
+        resultadoDiv.classList.remove('d-none');
+        resultadoDiv.innerHTML = '<div class="alert alert-danger">❗ Por favor, completa todos los campos con valores válidos.</div>';
+        return;
+      }
+
+      const precioFinal = costo * (1 + ganancia / 100);
+      const margenGanancia = precioFinal - costo;
+
+      resultadoDiv.classList.remove('d-none');
+      resultadoDiv.innerHTML = `
+        <div class="result-box text-center animate__animated animate__fadeIn">
+          <h4 class="text-success">Precio Final Sugerido: <strong>$${precioFinal.toFixed(2)}</strong></h4>
+          <p>📈 Margen de Ganancia: <strong>$${margenGanancia.toFixed(2)}</strong></p>
+        </div>
+      `;
+
+      productos.push({ concepto, costo, ganancia, precioFinal });
+      actualizarTabla();
+      limpiarCampos();
+    }
+
+    function actualizarTabla() {
+      const tbody = document.querySelector('#productosTable tbody');
+      tbody.innerHTML = '';
+      productos.forEach(p => {
+        const fila = `<tr>
+          <td>${p.concepto}</td>
+          <td>$${p.costo.toFixed(2)}</td>
+          <td>${p.ganancia}%</td>
+          <td>$${p.precioFinal.toFixed(2)}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML('beforeend', fila);
+      });
+    }
+
+    function limpiarCampos() {
+      document.getElementById('concept').value = '';
+      document.getElementById('cost').value = '';
+      document.getElementById('profit').value = '';
+    }
+
+    function exportarExcel() {
+      const ws = XLSX.utils.json_to_sheet(productos.map(p => ({
+        'Concepto': p.concepto,
+        'Costo Base ($)': p.costo,
+        '% Ganancia': p.ganancia,
+        'Precio Sugerido ($)': p.precioFinal
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Productos");
+      XLSX.writeFile(wb, "productos.xlsx");
+    }
+
+    function exportarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Historial de Productos", 10, 10);
+      let y = 20;
+      doc.setFontSize(10);
+      productos.forEach((p, i) => {
+        doc.text(`${i + 1}. ${p.concepto} | Costo: $${p.costo.toFixed(2)} | Ganancia: ${p.ganancia}% | Precio: $${p.precioFinal.toFixed(2)}`, 10, y);
+        y += 8;
+      });
+      doc.save("productos.pdf");
+    }
+
+    function borrarProductos() {
+      if (confirm("¿Estás seguro de que deseas borrar todos los productos?")) {
+        productos = [];
+        localStorage.removeItem('productos');
+        actualizarTabla();
+        document.getElementById('resultado').classList.add('d-none');
+      }
+    }
+
+    function guardarLocal() {
+      localStorage.setItem('productos', JSON.stringify(productos));
+      alert("📦 Productos guardados en el navegador.");
+    }
+  </script>
+</body>
+</html>
